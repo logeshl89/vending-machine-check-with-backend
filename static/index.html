@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Raspberry Pi Device Status</title>
+  <style>
+    :root {
+      --online-color: #4CAF50;
+      --idle-color: #FFC107;
+      --offline-color: #F44336;
+      --background-light: #f4f4f4;
+      --background-dark: #222;
+      --card-light: #ffffff;
+      --card-dark: #333;
+      --text-light: #000000;
+      --text-dark: #ffffff;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: var(--background-light);
+      color: var(--text-light);
+      margin: 0;
+      padding: 20px;
+      transition: background-color 0.3s, color 0.3s;
+    }
+
+    body.dark-mode {
+      background-color: var(--background-dark);
+      color: var(--text-dark);
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+
+    h1 {
+      margin-bottom: 10px;
+    }
+
+    .last-refreshed {
+      font-size: 0.9em;
+      color: #666;
+    }
+
+    .dark-mode .last-refreshed {
+      color: #aaa;
+    }
+
+    /* Status Cards */
+    .status-cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 20px;
+      margin-bottom: 30px;
+    }
+
+    .card {
+      background: var(--card-light);
+      border-radius: 8px;
+      padding: 20px;
+      text-align: center;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      transition: background-color 0.3s;
+    }
+
+    .dark-mode .card {
+      background: var(--card-dark);
+    }
+
+    .card h3 {
+      margin-top: 0;
+      font-size: 1em;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .card .value {
+      font-size: 2em;
+      font-weight: bold;
+      margin: 10px 0;
+    }
+
+    .card.online .value {
+      color: var(--online-color);
+    }
+
+    .card.idle .value {
+      color: var(--idle-color);
+    }
+
+    .card.offline .value {
+      color: var(--offline-color);
+    }
+
+    .card.total .value {
+      color: #2196F3;
+    }
+
+    /* Controls */
+    .controls {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .search-box {
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      background: var(--card-light);
+      color: var(--text-light);
+    }
+
+    .dark-mode .search-box {
+      background: var(--card-dark);
+      color: var(--text-dark);
+      border-color: #444;
+    }
+
+    .buttons {
+      display: flex;
+      gap: 10px;
+    }
+
+    button {
+      padding: 10px 15px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      background: #2196F3;
+      color: white;
+      transition: background 0.3s;
+    }
+
+    button:hover {
+      background: #0b7dda;
+    }
+
+    .dark-mode button {
+      background: #1976D2;
+    }
+
+    /* Table */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--card-light);
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      transition: background-color 0.3s;
+    }
+
+    .dark-mode table {
+      background: var(--card-dark);
+    }
+
+    th, td {
+      padding: 15px;
+      text-align: left;
+      border-bottom: 1px solid #eee;
+    }
+
+    .dark-mode th, .dark-mode td {
+      border-bottom: 1px solid #444;
+    }
+
+    th {
+      background: #f8f8f8;
+      font-weight: 600;
+    }
+
+    .dark-mode th {
+      background: #2a2a2a;
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    tr:hover {
+      background-color: rgba(0,0,0,0.02);
+    }
+
+    .dark-mode tr:hover {
+      background-color: rgba(255,255,255,0.05);
+    }
+
+    .status-indicator {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      margin-right: 8px;
+    }
+
+    .status-online {
+      background-color: var(--online-color);
+    }
+
+    .status-idle {
+      background-color: var(--idle-color);
+    }
+
+    .status-offline {
+      background-color: var(--offline-color);
+    }
+
+    .status-text {
+      font-weight: 500;
+    }
+
+    .online {
+      color: var(--online-color);
+    }
+
+    .idle {
+      color: var(--idle-color);
+    }
+
+    .offline {
+      color: var(--offline-color);
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .controls {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      
+      .buttons {
+        width: 100%;
+        justify-content: center;
+      }
+      
+      .status-cards {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Raspberry Pi Device Status</h1>
+      <div class="last-refreshed">Last refreshed: <span id="lastRefreshed">Never</span></div>
+    </header>
+
+    <!-- Status Indicator Cards -->
+    <div class="status-cards">
+      <div class="card online">
+        <h3>Online Devices</h3>
+        <div class="value" id="onlineCount">0</div>
+      </div>
+      <div class="card offline">
+        <h3>Offline Devices</h3>
+        <div class="value" id="offlineCount">0</div>
+      </div>
+      <div class="card total">
+        <h3>Total Devices</h3>
+        <div class="value" id="totalCount">0</div>
+      </div>
+      <div class="card">
+        <h3>Last Updated</h3>
+        <div class="value" id="lastUpdated">--:--:--</div>
+      </div>
+    </div>
+
+    <!-- Controls -->
+    <div class="controls">
+      <input type="text" id="searchBox" class="search-box" placeholder="Search by Device ID or IP..." />
+      <div class="buttons">
+        <button id="refreshBtn">Refresh</button>
+        <button id="exportBtn">Export CSV</button>
+        <button id="themeToggle">🌙 Dark Mode</button>
+      </div>
+    </div>
+
+    <!-- Device Table -->
+    <table id="deviceTable">
+      <thead>
+        <tr>
+          <th>Device ID</th>
+          <th>IP Address</th>
+          <th>Last Seen</th>
+          <th>Status</th>
+          <th>Signal Strength</th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- Device rows will be populated by JavaScript -->
+      </tbody>
+    </table>
+  </div>
+
+  <script>
+    // DOM Elements
+    const deviceTableBody = document.querySelector('#deviceTable tbody');
+    const onlineCountEl = document.getElementById('onlineCount');
+    const offlineCountEl = document.getElementById('offlineCount');
+    const totalCountEl = document.getElementById('totalCount');
+    const lastUpdatedEl = document.getElementById('lastUpdated');
+    const lastRefreshedEl = document.getElementById('lastRefreshed');
+    const searchBox = document.getElementById('searchBox');
+    const refreshBtn = document.getElementById('refreshBtn');
+    const exportBtn = document.getElementById('exportBtn');
+    const themeToggle = document.getElementById('themeToggle');
+
+    // State
+    let devicesData = [];
+    let darkMode = false;
+
+    // Format time difference
+    function formatTimeDifference(seconds) {
+      if (seconds < 60) {
+        return `${Math.round(seconds)} sec ago`;
+      } else if (seconds < 3600) {
+        return `${Math.round(seconds / 60)} min ago`;
+      } else {
+        return `${Math.round(seconds / 3600)} hr ago`;
+      }
+    }
+
+    // Determine device status
+    function getDeviceStatus(lastSeenSeconds) {
+      if (lastSeenSeconds < 60) {
+        return { text: 'Online', class: 'online', indicator: 'status-online' };
+      } else if (lastSeenSeconds < 180) {
+        return { text: 'Idle', class: 'idle', indicator: 'status-idle' };
+      } else {
+        return { text: 'Offline', class: 'offline', indicator: 'status-offline' };
+      }
+    }
+
+    // Estimate signal strength (simplified)
+    function getSignalStrength(lastSeenSeconds) {
+      if (lastSeenSeconds < 60) {
+        return 'Good';
+      } else if (lastSeenSeconds < 120) {
+        return 'Fair';
+      } else if (lastSeenSeconds < 180) {
+        return 'Weak';
+      } else {
+        return '–';
+      }
+    }
+
+    // Fetch devices from API
+    async function fetchDevices() {
+      try {
+        const response = await fetch('/api/devices');
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const data = await response.json();
+        devicesData = data;
+        renderDevices(data);
+        updateStatusCards(data);
+        updateLastUpdated();
+        
+        // Update last refreshed time
+        const now = new Date();
+        lastRefreshedEl.textContent = now.toLocaleTimeString();
+      } catch (error) {
+        console.error('Error fetching devices:', error);
+        deviceTableBody.innerHTML = `<tr><td colspan="5">Error loading devices: ${error.message}</td></tr>`;
+      }
+    }
+
+    // Render devices in table
+    function renderDevices(devices) {
+      const searchTerm = searchBox.value.toLowerCase();
+      const filteredDevices = devices.filter(device => 
+        device.device_id.toLowerCase().includes(searchTerm) || 
+        device.ip.toLowerCase().includes(searchTerm)
+      );
+
+      if (filteredDevices.length === 0) {
+        deviceTableBody.innerHTML = '<tr><td colspan="5">No devices found</td></tr>';
+        return;
+      }
+
+      deviceTableBody.innerHTML = '';
+      
+      const now = Date.now() / 1000;
+      
+      filteredDevices.forEach(device => {
+        const lastSeenSeconds = now - device.last_seen;
+        const status = getDeviceStatus(lastSeenSeconds);
+        const signalStrength = getSignalStrength(lastSeenSeconds);
+        const lastSeenText = formatTimeDifference(lastSeenSeconds);
+        
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${device.device_id}</td>
+          <td>${device.ip}</td>
+          <td>${lastSeenText}</td>
+          <td>
+            <span class="status-indicator ${status.indicator}"></span>
+            <span class="status-text ${status.class}">${status.text}</span>
+          </td>
+          <td>${signalStrength}</td>
+        `;
+        
+        deviceTableBody.appendChild(row);
+      });
+    }
+
+    // Update status cards
+    function updateStatusCards(devices) {
+      const now = Date.now() / 1000;
+      
+      let onlineCount = 0;
+      let offlineCount = 0;
+      
+      devices.forEach(device => {
+        const lastSeenSeconds = now - device.last_seen;
+        if (lastSeenSeconds < 60) {
+          onlineCount++;
+        } else if (lastSeenSeconds >= 180) {
+          offlineCount++;
+        }
+      });
+      
+      const idleCount = devices.length - onlineCount - offlineCount;
+      
+      onlineCountEl.textContent = onlineCount;
+      offlineCountEl.textContent = offlineCount;
+      totalCountEl.textContent = devices.length;
+    }
+
+    // Update last updated time
+    function updateLastUpdated() {
+      const now = new Date();
+      lastUpdatedEl.textContent = now.toLocaleTimeString();
+    }
+
+    // Export to CSV
+    function exportToCSV() {
+      if (devicesData.length === 0) {
+        alert('No data to export');
+        return;
+      }
+      
+      const headers = ['Device ID', 'IP Address', 'Last Seen', 'Status'];
+      const csvContent = [
+        headers.join(','),
+        ...devicesData.map(device => {
+          const now = Date.now() / 1000;
+          const lastSeenSeconds = now - device.last_seen;
+          const status = getDeviceStatus(lastSeenSeconds).text;
+          const lastSeenText = formatTimeDifference(lastSeenSeconds);
+          return [
+            device.device_id,
+            device.ip,
+            lastSeenText,
+            status
+          ].join(',');
+        })
+      ].join('\n');
+      
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', `pi_status_${new Date().toISOString().slice(0, 10)}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    // Toggle dark mode
+    function toggleDarkMode() {
+      darkMode = !darkMode;
+      if (darkMode) {
+        document.body.classList.add('dark-mode');
+        themeToggle.textContent = '☀️ Light Mode';
+      } else {
+        document.body.classList.remove('dark-mode');
+        themeToggle.textContent = '🌙 Dark Mode';
+      }
+    }
+
+    // Event Listeners
+    refreshBtn.addEventListener('click', fetchDevices);
+    exportBtn.addEventListener('click', exportToCSV);
+    themeToggle.addEventListener('click', toggleDarkMode);
+    searchBox.addEventListener('input', () => renderDevices(devicesData));
+
+    // Initial load
+    fetchDevices();
+    
+    // Auto-refresh every 30 seconds
+    setInterval(fetchDevices, 30000);
+  </script>
+</body>
+</html>
